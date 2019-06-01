@@ -50,7 +50,6 @@ class ContextsCollector(pytest.Collector):
                 yield ContextsItem(item_name, context, assertion, self.path, self.parent)
 
 
-
 class ContextsItem(pytest.Item):
 
     def __init__(self, name, context, assertion, path, parent):
@@ -59,24 +58,29 @@ class ContextsItem(pytest.Item):
         self.assertion = assertion
         self.path = path
         super().__init__(name, parent=parent)
-        self.context.assertions_run = 0
+        self.context._pytest_contexts_run_setup = False
+        self.context._pytest_contexts_setup_failed = False
 
     def reportinfo(self):
         return self.name, 0, f'{self.path}:{self.name}'
 
     def setup(self):
-        if self.context.assertions_run > 0:
-            return
-        self.context.run_setup()
-        self.context.run_action()
+        if not self.context._pytest_contexts_run_setup:
+            self.context._pytest_contexts_run_setup = True
+            try:
+                self.context.run_setup()
+                self.context.run_action()
+            except Exception:
+                self.context._pytest_contexts_setup_failed = True
+                raise
 
     def runtest(self):
-        self.context.assertions_run += 1
+        if self.context._pytest_contexts_setup_failed:
+            return
+
         run_with_test_data(self.assertion.func, self.context.example)
 
     def teardown(self):
-        if self.context.assertions_run < len(self.context.assertions):
-            return
         self.context.run_teardown()
 
     def _prunetraceback(self, excinfo):
